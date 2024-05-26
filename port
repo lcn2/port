@@ -85,7 +85,7 @@ shopt -s globstar	# enable ** to match all files and zero or more directories an
 
 # setup
 #
-export VERSION="1.0 2024-05-26"
+export VERSION="1.0.1 2024-05-26"
 NAME=$(basename "$0")
 export NAME
 #
@@ -101,6 +101,16 @@ NC=$(type -P nc)
 export NC
 if [[ -z $NC ]]; then
     echo "$0: ERROR: cannot find nc command" 1>&2
+    exit 4
+fi
+
+
+# check for awk
+#
+AWK=$(type -P awk)
+export AWK
+if [[ -z $AWK ]]; then
+    echo "$0: ERROR: cannot find awk command" 1>&2
     exit 4
 fi
 
@@ -174,20 +184,12 @@ done
 #
 shift $(( OPTIND - 1 ));
 #
-# verify arg count
-#
-if [[ $# -lt 1 ]]; then
-    echo "$0: ERROR: expected 1 or 2 args, found: $#" 1>&2
-    echo "$USAGE" 1>&2
-    exit 3
-fi
-#
 # parse args
 #
 case "$#" in
     1) HOST_ARG="$1"; ;;
     2) HOST_ARG="$1"; PORT="$2" ;;
-    *) echo "$0: ERROR: expected 0 or 1 args, found: $#" 1>&2; exit 3 ;;
+    *) echo "$0: ERROR: expected 1 or 2 args, found: $#" 1>&2; exit 3 ;;
 esac
 
 
@@ -195,7 +197,7 @@ esac
 #
 # Do not use the timeout command
 #
-if awk -v a="$TIMEOUT_TIME" -v b=0 'BEGIN {exit !(a <= b)}'; then
+if "$AWK" -v a="$TIMEOUT_TIME" -v b=0 'BEGIN {exit !(a <= b)}'; then
 
     # clear timeouts for any timeout <= 0
     #
@@ -207,11 +209,11 @@ if awk -v a="$TIMEOUT_TIME" -v b=0 'BEGIN {exit !(a <= b)}'; then
 #
 # Extend the TCP timeout beyond the timeout time
 #
-elif awk -v a="$TIMEOUT_TIME" -v b=0 'BEGIN {exit !(a > b)}'; then
+elif "$AWK" -v a="$TIMEOUT_TIME" -v b=0 'BEGIN {exit !(a > b)}'; then
 
     # round TCP timeout to a whole second above timeout time
     #
-    TCP_TIMEOUT=$(awk -v a="$TIMEOUT_TIME" 'BEGIN {print int(a+1); exit}')
+    TCP_TIMEOUT=$("$AWK" -v a="$TIMEOUT_TIME" 'BEGIN {print int(a+1); exit}')
 
 fi
 NC_ARGS="$NC_ARGS -G $TCP_TIMEOUT"
