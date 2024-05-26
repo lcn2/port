@@ -6,7 +6,7 @@ Determine if a host is accessible on a given TCP port.
 # Usage
 
 ```
-port [-h] [-v level] [-V] [-t timeout] host [port]
+port [-h] [-v level] [-V] [-t timeout] host [port_num]
 
 	-h		print help message and exit
 	-v level	set verbosity level (def level: 0)
@@ -18,7 +18,7 @@ port [-h] [-v level] [-V] [-t timeout] host [port]
 			NOTE: If > 1, the nc -G TCP timeout will be extended as well
 
 	host		hostname or IP address of server
-	port		TCP port to probe (def: 22)
+	port_num	TCP port number to probe (def: 22)
 
 Exit codes:
      0	    host port is accessible
@@ -59,4 +59,19 @@ with even more verbosity.  Wait up to 2.5 seconds for the host to respond:
 
 ```sh
 port -v 3 -t 2.5 nowhere.example.com 12345
+```
+
+
+# Installation
+
+To install into the default `/usr/local/bin` directory:
+
+```sh
+make install
+```
+
+To install some place else, such as `/var/tmp` for example:
+
+```sh
+make install DESTDIR=/var/tmp
 ```
