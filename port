@@ -1,0 +1,320 @@
+#!/usr/bin/env bash
+#
+# port - determine if a host is accessible on a given TCP port
+#
+# Copyright (c) 2024 by Landon Curt Noll.  All Rights Reserved.
+#
+# Permission to use, copy, modify, and distribute this software and
+# its documentation for any purpose and without fee is hereby granted,
+# provided that the above copyright, this permission notice and text
+# this comment, and the disclaimer below appear in all of the following:
+#
+#       supporting documentation
+#       source copies
+#       source works derived from this source
+#       binaries derived from this source or from derived source
+#
+# LANDON CURT NOLL DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE,
+# INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO
+# EVENT SHALL LANDON CURT NOLL BE LIABLE FOR ANY SPECIAL, INDIRECT OR
+# CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF
+# USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+# OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+# PERFORMANCE OF THIS SOFTWARE.
+#
+# chongo (Landon Curt Noll, http://www.isthe.com/chongo/index.html) /\oo/\
+#
+# Share and enjoy! :-)
+
+
+# firewall - run only with a bash that is version 5.1.8 or later
+#
+# The "/usr/bin/env bash" command must result in using a bash that
+# is version 5.1.8 or later.
+#
+# We could relax this version and insist on version 4.2 or later.  Versions
+# of bash between 4.2 and 5.1.7 might work.  However, to be safe, we will require
+# bash version 5.1.8 or later.
+#
+# WHY 5.1.8 and not 4.2?  This safely is done because macOS Homebrew bash we
+# often use is "version 5.2.26(1)-release" or later, and the RHEL Linux bash we
+# use often use is "version 5.1.8(1)-release" or later.  These versions are what
+# we initially tested.  We recommend you either upgrade bash or install a newer
+# version of bash and adjust your $PATH so that "/usr/bin/env bash" finds a bash
+# that is version 5.1.8 or later.
+#
+# NOTE: The macOS shipped, as of 2024 March 15, a version of bash is something like
+#	bash "version 3.2.57(1)-release".  That macOS shipped version of bash
+#	will NOT work.  For users of macOS we recommend you install Homebrew,
+#	(see https://brew.sh), and then run "brew install bash" which will
+#	typically install it into /opt/homebrew/bin/bash, and then arrange your $PATH
+#	so that "/usr/bin/env bash" finds "/opt/homebrew/bin" (or whatever the
+#	Homebrew bash is).
+#
+# NOTE: And while MacPorts might work, we noticed a number of subtle differences
+#	with some of their ported tools to suggest you might be better off
+#	with installing Homebrew (see https://brew.sh).  No disrespect is intended
+#	to the MacPorts team as they do a commendable job.  Nevertheless we ran
+#	into enough differences with MacPorts environments to suggest you
+#	might find a better experience with this tool under Homebrew instead.
+#
+if [[ -z ${BASH_VERSINFO[0]} ||
+	 ${BASH_VERSINFO[0]} -lt 5 ||
+	 ${BASH_VERSINFO[0]} -eq 5 && ${BASH_VERSINFO[1]} -lt 1 ||
+	 ${BASH_VERSINFO[0]} -eq 5 && ${BASH_VERSINFO[1]} -eq 1 && ${BASH_VERSINFO[2]} -lt 8 ]]; then
+    echo "$0: ERROR: bash version needs to be >= 5.1.8: $BASH_VERSION" 1>&2
+    echo "$0: Warning: bash version >= 4.2 might work but 5.1.8 was the minimum we tested" 1>&2
+    echo "$0: Notice: For macOS users: install Homebrew (see https://brew.sh), then run" \
+	 ""brew install bash" and then modify your \$PATH so that \"#!/usr/bin/env bash\"" \
+	 "finds the Homebrew installed (usually /opt/homebrew/bin/bash) version of bash" 1>&2
+    exit 4
+fi
+
+# setup bash file matching
+#
+# We must declare arrays with -ag or -Ag, and we need loops to "export" modified variables.
+# This requires a bash with a version 4.2 or later.  See the larger comment above about bash versions.
+#
+shopt -s nullglob	# enable expanded to nothing rather than remaining unexpanded
+shopt -u failglob	# disable error message if no matches are found
+shopt -u dotglob	# disable matching files starting with .
+shopt -u nocaseglob	# disable strict case matching
+shopt -u extglob	# enable extended globbing patterns
+shopt -s globstar	# enable ** to match all files and zero or more directories and subdirectories
+
+
+# setup
+#
+export VERSION="1.0 2024-05-26"
+NAME=$(basename "$0")
+export NAME
+#
+export V_FLAG=0
+export TCP_TIMEOUT="1"
+export NC_ARGS="-4 -d -L 1 -t -z"
+export PORT="22"
+
+
+# check for nc
+#
+NC=$(type -P nc)
+export NC
+if [[ -z $NC ]]; then
+    echo "$0: ERROR: cannot find nc command" 1>&2
+    exit 4
+fi
+
+# check for timeout
+#
+TIMEOUT=$(type -P timeout)
+export TIMEOUT
+export TIMEOUT_TIME="0.25"
+
+
+# usage
+#
+export USAGE="usage: $0 [-h] [-v level] [-V] [-t timeout] host [port_num]
+
+	-h		print help message and exit
+	-v level	set verbosity level (def level: $V_FLAG)
+	-V		print version string and exit
+
+	-t timeout	seconds for probe timeout (def: $TIMEOUT_TIME)
+			NOTE: timeout may be a floating point value
+			NOTE: 0 ==> infinite time
+			NOTE: If > 1, the nc -G TCP timeout will be extended as well
+
+	host		hostname or IP address of server
+	port_num	TCP port number to probe (def: $PORT)
+
+Exit codes:
+     0	    host port is accessible
+     1	    host port is NOT accessible
+     2	    -h and help string printed or -V and version string printed
+     3	    command line error
+     4	    missing critical tool, or bash is tool old
+ >= 10	    internal error
+
+$NAME version: $VERSION"
+
+
+# parse command line
+#
+while getopts :hv:Vt: flag; do
+  case "$flag" in
+    h) echo "$USAGE"
+	exit 2
+	;;
+    v) V_FLAG="$OPTARG"
+	;;
+    V) echo "$VERSION"
+	exit 2
+	;;
+    t) TIMEOUT_TIME="$OPTARG"
+	;;
+    \?) echo "$0: ERROR: invalid option: -$OPTARG" 1>&2
+	echo 1>&2
+	echo "$USAGE" 1>&2
+	exit 3
+	;;
+    :) echo "$0: ERROR: option -$OPTARG requires an argument" 1>&2
+	echo 1>&2
+	echo "$USAGE" 1>&2
+	exit 3
+	;;
+    *) echo "$0: ERROR: unexpected value from getopts: $flag" 1>&2
+	echo 1>&2
+	echo "$USAGE" 1>&2
+	exit 3
+	;;
+  esac
+done
+#
+# remove the options
+#
+shift $(( OPTIND - 1 ));
+#
+# verify arg count
+#
+if [[ $# -lt 1 ]]; then
+    echo "$0: ERROR: expected 1 or 2 args, found: $#" 1>&2
+    echo "$USAGE" 1>&2
+    exit 3
+fi
+#
+# parse args
+#
+case "$#" in
+    1) HOST_ARG="$1"; ;;
+    2) HOST_ARG="$1"; PORT="$2" ;;
+    *) echo "$0: ERROR: expected 0 or 1 args, found: $#" 1>&2; exit 3 ;;
+esac
+
+
+# case: timeout <= 0
+#
+# Do not use the timeout command
+#
+if awk -v a="$TIMEOUT_TIME" -v b=0 'BEGIN {exit !(a <= b)}'; then
+
+    # clear timeouts for any timeout <= 0
+    #
+    TIMEOUT=
+    TCP_TIMEOUT=0
+
+
+# case: timeout > 1
+#
+# Extend the TCP timeout beyond the timeout time
+#
+elif awk -v a="$TIMEOUT_TIME" -v b=0 'BEGIN {exit !(a > b)}'; then
+
+    # round TCP timeout to a whole second above timeout time
+    #
+    TCP_TIMEOUT=$(awk -v a="$TIMEOUT_TIME" 'BEGIN {print int(a+1); exit}')
+
+fi
+NC_ARGS="$NC_ARGS -G $TCP_TIMEOUT"
+
+
+# if HOST_ARG is an IP address, use -n with nc
+#
+if [[ $HOST_ARG =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+    NC_ARGS="$NC_ARGS -n"
+fi
+
+
+# print running info if verbose
+#
+# If -v 3 or higher, print exported variables in order that they were exported.
+#
+if [[ $V_FLAG -ge 1 ]]; then
+    if [[ -z $TIMEOUT ]]; then
+	echo "$0: debug[1]: will probe host: $HOST_ARG port $PORT" 1>&2
+    else
+	echo "$0: debug[1]: will probe for up to $TIMEOUT_TIME seconds host: $HOST_ARG port $PORT" 1>&2
+    fi
+fi
+if [[ $V_FLAG -ge 3 ]]; then
+    echo "$0: debug[3]: VERSION=$VERSION" 1>&2
+    echo "$0: debug[3]: NAME=$NAME" 1>&2
+    echo "$0: debug[3]: V_FLAG=$V_FLAG" 1>&2
+    echo "$0: debug[3]: HOST_ARG=$HOST_ARG" 1>&2
+    echo "$0: debug[3]: TCP_TIMEOUT=$TCP_TIMEOUT" 1>&2
+    echo "$0: debug[3]: NC_ARGS=$NC_ARGS" 1>&2
+    echo "$0: debug[3]: PORT=$PORT" 1>&2
+    echo "$0: debug[3]: TIMEOUT=$TIMEOUT" 1>&2
+    echo "$0: debug[3]: TIMEOUT_TIME=$TIMEOUT_TIME" 1>&2
+fi
+
+
+# case: have timeout
+#
+if [[ -n $TIMEOUT ]]; then
+
+    if [[ $V_FLAG -ge 3 ]]; then
+	echo "$0: debug[3]: about to execute: $TIMEOUT --preserve-status $TIMEOUT_TIME $NC $NC_ARGS $HOST_ARG $PORT" 2>&1
+    fi
+    NC_OUTPUT=$(eval "$TIMEOUT" --preserve-status "$TIMEOUT_TIME" "$NC" "$NC_ARGS" "$HOST_ARG" "$PORT" 2>&1)
+    status="$?"
+    export NC_OUTPUT
+    if [[ $V_FLAG -ge 3 ]]; then
+	echo "$0: debug[3]: timeout and nc output starts below" 1>&2
+	if [[ -n $NC_OUTPUT ]]; then
+	    echo "$NC_OUTPUT" 1>&2
+	fi
+	echo "$0: debug[3]: timeout and nc output ends above" 0>&2
+    fi
+
+
+# case: do not have timeout
+#
+# We have to accept the 1 second delay.
+#
+else
+
+    if [[ $V_FLAG -ge 3 ]]; then
+	echo "$0: debug[3]: about to execute: $NC $NC_ARGS $HOST_ARG $PORT" 2>&1
+    fi
+    NC_OUTPUT=$(eval "$NC" "$NC_ARGS" "$HOST_ARG" "$PORT" 2>&1)
+    status="$?"
+    export NC_OUTPUT
+    if [[ $V_FLAG -ge 3 ]]; then
+	echo "$0: debug[3]: nc output starts below" 1>&2
+	if [[ -n $NC_OUTPUT ]]; then
+	    echo "$NC_OUTPUT" 1>&2
+	fi
+	echo "$0: debug[3]: nc output ends above" 1>&2
+    fi
+
+fi
+
+# process nc exit code
+#
+if [[ $status -eq 0 ]]; then
+    if [[ $V_FLAG -ge 1 ]]; then
+	echo "$0: debug[1]: host $HOST_ARG port $PORT accessible"
+    fi
+    export ACCESSABLE="true"
+elif [[ $status -eq 143 ]]; then
+    if [[ $V_FLAG -ge 1 ]]; then
+	echo "$0: debug[1]: timeout after $TIMEOUT_TIME seconds on host $HOST_ARG port $PORT assume NOT accessible"
+    fi
+    export ACCESSABLE=
+elif [[ $status -eq 1 ]]; then
+    if [[ $V_FLAG -ge 1 ]]; then
+	echo "$0: debug[1]: host $HOST_ARG port $PORT NOT accessible"
+    fi
+    export ACCESSABLE=
+else
+    echo "$0: ERROR: $NC $NC_ARGS $HOST_ARG $PORT failed, error: $status" 1>&2
+    exit 10
+fi
+
+
+# All Done!!! -- Jessica Noll, Age 2
+#
+if [[ -z $ACCESSABLE ]]; then
+    exit 1
+fi
+exit 0
