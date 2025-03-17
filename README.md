@@ -75,3 +75,8 @@ To install some place else, such as `/var/tmp` for example:
 ```sh
 make install DESTDIR=/var/tmp
 ```
+
+
+# Reporting Security Issues
+
+To report a security issue, please visit "[Reporting Security Issues](https://github.com/lcn2/port/security/policy)".
