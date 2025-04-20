@@ -3,10 +3,51 @@
 Determine if a host is accessible on a given TCP port.
 
 
+# To install
+
+To install into the default `/usr/local/bin` directory:
+
+```sh
+make install
+```
+
+
+# Examples
+
+Determine if the ssh port on github.com is accessible.
+No output is produced.  A 0 exit code insides access.
+
+```sh
+$ /usr/local/bin/port github.com
+```
+
+Use the port command to determine of TCP port 80 for www.github.com is accessible:
+
+```sh
+$ if /usr/local/bin/port www.github.com 80; then
+    echo "Yes, TCP port 80 for www.github.com is accessible."
+fi
+```
+
+Determine if TCP port 443 (https) on www.google.com is accessible,
+with some additional verbosity:
+
+```sh
+$ /usr/local/bin/port -v 1 www.google.com 443
+```
+
+Determine if TCP port 12345 on nowhere.example.com is accessible
+with even more verbosity.  Wait up to 2.5 seconds for the host to respond:
+
+```sh
+$ /usr/local/bin/port -v 3 -t 2.5 nowhere.example.com 12345
+```
+
+
 # Usage
 
 ```
-port [-h] [-v level] [-V] [-t timeout] host [port_num]
+/usr/local/bin/port [-h] [-v level] [-V] [-t timeout] host [port_num]
 
 	-h		print help message and exit
 	-v level	set verbosity level (def level: 0)
@@ -27,53 +68,6 @@ Exit codes:
      3	    command line error
      4	    missing critical tool
  >= 10	    internal error
-```
-
-
-# Examples
-
-Determine if the ssh port on github.com is accessible.
-No output is produced.  A 0 exit code insides access.
-
-```sh
-port github.com
-```
-
-Use the port command to determine of TCP port 80 for www.github.com is accessible:
-
-```sh
-if port www.github.com 80; then
-    echo "Yes, TCP port 80 for www.github.com is accessible."
-fi
-```
-
-Determine if TCP port 443 (https) on www.google.com is accessible,
-with some additional verbosity:
-
-```sh
-port -v 1 www.google.com 443
-```
-
-Determine if TCP port 12345 on nowhere.example.com is accessible
-with even more verbosity.  Wait up to 2.5 seconds for the host to respond:
-
-```sh
-port -v 3 -t 2.5 nowhere.example.com 12345
-```
-
-
-# Installation
-
-To install into the default `/usr/local/bin` directory:
-
-```sh
-make install
-```
-
-To install some place else, such as `/var/tmp` for example:
-
-```sh
-make install DESTDIR=/var/tmp
 ```
 
 
